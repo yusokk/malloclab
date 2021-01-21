@@ -130,6 +130,10 @@ void *mm_malloc(size_t size)
         asize = 2*DSIZE; // size + header + footer
     else
         asize = DSIZE * ((size + (DSIZE) + (DSIZE-1)) / DSIZE);
+    /* <송예은> 이 if, else문은 size가 더블워드 사이즈보다 작거나 같으면 최소 블록 크기로 맞춰주고, 아니라면 인접 8의 배수로 올려주는 코드인데,
+    우리는 매크로에서 ALIGN을 정의했기때문에, asize = MAX(ALIGN(size) + DSIZE, 2*DSIZE) 로 바꿔주면 같은 의미라서
+    if, else 문을 한 줄의 코드로 줄일 수 있습니다. */
+    
 
     /* Search the free list for a fit */
     if ((bp = find_fit(asize)) != NULL) {
@@ -160,11 +164,16 @@ void mm_free(void *bp)
 static void *coalesce(void *bp)
 {
     size_t prev_alloc = GET_ALLOC(HDRP(PREV_BLKP(bp)));
+    /* <송예은> 이전 블럭의 할당 상태를 구할 때, 헤더로 구하는 것과 푸터로 구하는 것이 값이 똑같아서 상관은 없지만,
+    실제로는 이전 블럭의 푸터와 다음 블록의 헤더를 확인하는 것이므로 
+    prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp))); 로 쓰는 것이 더 직관적이라 생각합니다.*/
+
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
 
     if (prev_alloc && next_alloc) {
-        return bp;
+        return bp; 
+        // <송예은> 이 부분도 전혀 상관은 없지만, if문 밖 맨아래 return bp; 를 해주고 있어서 if문 안쪽을 비워두면 중복된 코드를 피할 수 있습니다.
     }
 
     else if (prev_alloc && !next_alloc) {
@@ -178,12 +187,25 @@ static void *coalesce(void *bp)
         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
         PUT(FTRP(PREV_BLKP(bp)), PACK(size, 0));
         bp = PREV_BLKP(bp);
+        /* <송예은> 이 부분에서 두번의 PUT과정보다 bp = PREV_BLKP(bp); 를 먼저 해주면 
+        PUT(HDRP(bp)), PACK(size, 0));
+        PUT(FTRP(bp)), PACK(size, 0));
+        위와 같이 PUT을 바꿀 수 있습니다. 
+        coalesce 분기 내의 PUT 함수를 통일할 수 있어 코드가 더 깔끔해집니다.
+        */
     }
     else {
         size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(HDRP(NEXT_BLKP(bp)));
         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
         PUT(FTRP(PREV_BLKP(bp)), PACK(size, 0));
         bp = PREV_BLKP(bp);
+        /* <송예은> (위와 동일합니다.)
+        이 부분에서 두번의 PUT과정보다 bp = PREV_BLKP(bp); 를 먼저 해주면 
+        PUT(HDRP(bp)), PACK(size, 0));
+        PUT(FTRP(bp)), PACK(size, 0));
+        위와 같이 PUT을 바꿀 수 있습니다. 
+        coalesce 분기 내의 PUT 함수를 통일할 수 있어 코드가 더 깔끔해집니다.
+        */
     }
 
     return bp;
@@ -214,6 +236,9 @@ static void *find_fit(size_t asize) {
     while (GET_SIZE(HDRP(current_block)) != 0) {
         if (!GET_ALLOC(HDRP(current_block))) {
             if (GET_SIZE(HDRP(current_block)) >= asize) {
+            /* <송예은> 이 중첩된 If문은 and 로 묶어 아래와 같이 하나의 if문으로 바꿀 수 있습니다.
+            if ((!GET_ALLOC(HDRP(current_block))) && (GET_SIZE(HDRP(current_block)) >= asize)) 
+            */
                 return current_block;
             }
         }
@@ -226,8 +251,9 @@ static void place(void* bp, size_t asize) {
     size_t size = GET_SIZE(HDRP(bp));
     PUT(HDRP(bp), PACK(asize, 1));
     PUT(FTRP(bp), PACK(asize, 1));
-    if ((size - asize) >= DSIZE) {
+    if ((size - asize) >= DSIZE) { 
         PUT(HDRP(NEXT_BLKP(bp)), PACK((size-asize), 0));
         PUT(FTRP(NEXT_BLKP(bp)), PACK((size-asize), 0));
+        /*<송예은> 가용블록이 변했으니 coalesce를 실행해서 연결해주면 더 좋을 것 같습니다.*/
     }
 }
